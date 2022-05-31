@@ -1,12 +1,12 @@
+extern crate byteorder;
+use byteorder::{BigEndian, ReadBytesExt};
 use std::fs;
 use std::io::{self, Read};
 use std::path;
 
-const IMAGE_SIZE: usize = 28 * 28;
-
 pub struct MnistLoader {
-    pub train_images: Vec<[u8; IMAGE_SIZE]>,
-    pub test_images: Vec<[u8; IMAGE_SIZE]>,
+    pub train_images: Vec<u8>,
+    pub test_images: Vec<u8>,
     pub train_labels: Vec<u8>,
     pub test_labels: Vec<u8>,
 }
@@ -89,44 +89,30 @@ impl MnistLoader {
     }
 }
 
-fn images(path: impl AsRef<path::Path>) -> io::Result<(u32, u32, u32, u32, Vec<[u8; IMAGE_SIZE]>)> {
-    let mut file = fs::File::open(path)?;
-    let mut buf: [u8; 4] = [0; 4];
+fn images(path: impl AsRef<path::Path>) -> io::Result<(u32, u32, u32, u32, Vec<u8>)> {
+    let mut content = Vec::new();
+    let mut file = {
+        let mut f = fs::File::open(path)?;
+        let _ = f.read_to_end(&mut content)?;
+        &content[..]
+    };
 
-    file.read_exact(&mut buf)?;
-    let magic_number = u32::from_be_bytes(buf);
-    file.read_exact(&mut buf)?;
-    let num_images = u32::from_be_bytes(buf);
-    file.read_exact(&mut buf)?;
-    let num_rows = u32::from_be_bytes(buf);
-    file.read_exact(&mut buf)?;
-    let num_cols = u32::from_be_bytes(buf);
-
-    let mut image_buf: [u8; IMAGE_SIZE] = [0; IMAGE_SIZE];
-    let mut images = Vec::new();
-    for _ in 0..num_images {
-        file.by_ref()
-            .take((num_rows * num_cols) as u64)
-            .read(&mut image_buf)?;
-        images.push(image_buf.clone());
-    }
-    Ok((magic_number, num_images, num_rows, num_cols, images))
+    let magic_number = file.read_u32::<BigEndian>()?;
+    let num_images = file.read_u32::<BigEndian>()?;
+    let num_rows = file.read_u32::<BigEndian>()?;
+    let num_cols = file.read_u32::<BigEndian>()?;
+    Ok((magic_number, num_images, num_rows, num_cols, file.to_vec()))
 }
 
 fn labels(path: impl AsRef<path::Path>) -> io::Result<(u32, u32, Vec<u8>)> {
-    let mut file = fs::File::open(path)?;
-    let mut buf: [u8; 4] = [0; 4];
+    let mut content = Vec::new();
+    let mut file = {
+        let mut f = fs::File::open(path)?;
+        let _ = f.read_to_end(&mut content)?;
+        &content[..]
+    };
 
-    file.read_exact(&mut buf)?;
-    let magic_number = u32::from_be_bytes(buf);
-    file.read_exact(&mut buf)?;
-    let num_items = u32::from_be_bytes(buf);
-
-    let mut label: [u8; 1] = [0];
-    let mut labels = Vec::new();
-    for _ in 0..num_items {
-        file.by_ref().take(1).read(&mut label)?;
-        labels.push(label[0]);
-    }
-    Ok((magic_number, num_items, labels))
+    let magic_number = file.read_u32::<BigEndian>()?;
+    let num_items = file.read_u32::<BigEndian>()?;
+    Ok((magic_number, num_items, file.to_vec()))
 }
