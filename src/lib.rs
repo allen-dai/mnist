@@ -164,13 +164,108 @@ impl Mnist {
         } else {
             println!("Found uncompressed file...");
         }
-        println!("Loading up dataset...");
         Ok(Self::from_file(
             train_img_path.with_extension(""),
             train_lbl_path.with_extension(""),
             test_img_path.with_extension(""),
             test_lbl_path.with_extension(""),
         )?)
+    }
+
+    pub fn random_xy_offset(&mut self) {
+        use rand::prelude::*;
+        use std::collections::VecDeque;
+        let mut rng = thread_rng();
+
+        let mut imgs: Vec<u8> = Vec::new();
+
+        for img_num in 0..60000 {
+            let mut image = VecDeque::new();
+
+            for r in 0..28 {
+                let mut row = VecDeque::new();
+                for c in 0..28 {
+                    row.push_back(self.train_images[img_num * 28 * 28 + (r * 28) + c])
+                }
+                image.push_back(row);
+            }
+
+            let mut left_bound = 28;
+            let mut right_bound = 0;
+            let mut top_bound = 0;
+            let mut bottom_bound = 0;
+
+            let mut top_counted = false;
+            let mut bottom_counted = false;
+
+            image.iter().enumerate().for_each(|(i, r)| {
+                if r.iter().max().unwrap() > &0 {
+                    if !top_counted {
+                        top_bound = i;
+                        top_counted = true;
+                    }
+                    let mut left_tmp = 0;
+                    let mut right_tmp = 0;
+                    for (j, n) in r.iter().enumerate() {
+                        left_tmp = left_tmp.max(j);
+                        if *n != 0 {
+                            break;
+                        }
+                    }
+                    left_bound = left_bound.min(left_tmp);
+                    for (j, n) in r.iter().rev().enumerate() {
+                        right_tmp = right_tmp.max(j);
+                        if *n != 0 {
+                            break;
+                        }
+                    }
+                    right_bound = right_bound.max(27 - right_tmp);
+                } else if top_counted && !bottom_counted {
+                    bottom_bound = i - 1;
+                    bottom_counted = true;
+                }
+            });
+
+            if left_bound > 0 {
+                let left_shift = rng.gen_range(0..left_bound);
+                for row in image.iter_mut() {
+                    for _ in 0..left_shift {
+                        row.pop_front();
+                        row.push_back(0);
+                    }
+                }
+            }
+            if 27 - right_bound > 0 {
+                let right_shift = rng.gen_range(0..(27 - right_bound));
+                for row in image.iter_mut() {
+                    for _ in 0..right_shift {
+                        row.pop_back();
+                        row.push_front(0);
+                    }
+                }
+            }
+
+            if top_bound > 0 {
+                let top_shift = rng.gen_range(0..top_bound);
+                for _ in 0..top_shift {
+                    image.pop_front();
+                    image.push_back(VecDeque::from(vec![0; 28]));
+                }
+            }
+            if 27 - bottom_bound > 0 {
+                let bottom_shift = rng.gen_range(0..(27 - bottom_bound));
+                for _ in 0..bottom_shift {
+                    image.pop_back();
+                    image.push_front(VecDeque::from(vec![0; 28]));
+                }
+            }
+
+            for r in image {
+                for c in r {
+                    imgs.push(c);
+                }
+            }
+        }
     }
 }
 
@@ -204,5 +299,6 @@ fn labels(path: impl AsRef<path::Path>) -> io::Result<(u32, u32, Vec<u8>)> {
 
 #[test]
 fn test_download() {
-    Mnist::from_download().unwrap();
+    let mut m = Mnist::from_download().unwrap();
+    m.random_xy_offsett();
 }
