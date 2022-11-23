@@ -4,15 +4,20 @@ use std::fs;
 use std::io::{self, Read};
 use std::path;
 
-pub struct MnistLoader {
+const TRAIN_IMG_URL: &str = &"http://yann.lecun.com/exdb/mnist/train-images-idx3-ubyte.gz";
+const TRAIN_LBL_URL: &str = &"http://yann.lecun.com/exdb/mnist/train-labels-idx1-ubyte.gz";
+const TEST_IMG_URL: &str = &"http://yann.lecun.com/exdb/mnist/t10k-images-idx3-ubyte.gz";
+const TEST_LBL_URL: &str = &"http://yann.lecun.com/exdb/mnist/t10k-labels-idx1-ubyte.gz";
+
+pub struct Mnist {
     pub train_images: Vec<u8>,
     pub test_images: Vec<u8>,
     pub train_labels: Vec<u8>,
     pub test_labels: Vec<u8>,
 }
 
-impl MnistLoader {
-    pub fn new<T: AsRef<path::Path>>(
+impl Mnist {
+    pub fn from_file<T: AsRef<path::Path>>(
         train_img_path: T,
         train_label_path: T,
         test_img_path: T,
@@ -80,12 +85,92 @@ impl MnistLoader {
             return Err(invalid_error);
         }
 
-        Ok(MnistLoader {
+        Ok(Mnist {
             train_images,
             train_labels,
             test_images,
             test_labels,
         })
+    }
+
+    pub fn from_download() -> anyhow::Result<Self> {
+        use flate2::read::GzDecoder;
+        use std::io::prelude::*;
+        use std::io::BufWriter;
+        fs::create_dir_all("./mnist_dataset")?;
+        let train_img_path = std::path::Path::new("./mnist_dataset/train-images-idx3-ubyte.gz");
+        let train_lbl_path = std::path::Path::new("./mnist_dataset/train-labels-idx1-ubyte.gz");
+        let test_img_path = std::path::Path::new("./mnist_dataset/t10k-images-idx3-ubyte.gz");
+        let test_lbl_path = std::path::Path::new("./mnist_dataset/t10k-labels-idx1-ubyte.gz");
+
+        if !(train_img_path.exists()
+            && train_lbl_path.exists()
+            && test_img_path.exists()
+            && test_lbl_path.exists())
+        {
+            println!("Downloading dataset from 'yann.lecun.com'...");
+            let mut train_img_gz_file = std::fs::File::create(&train_img_path)?;
+            let mut train_lbl_gz_file = std::fs::File::create(&train_lbl_path)?;
+            let mut test_img_gz_file = std::fs::File::create(&test_img_path)?;
+            let mut test_lbl_gz_file = std::fs::File::create(&test_lbl_path)?;
+
+            reqwest::blocking::get(TRAIN_IMG_URL)?.copy_to(&mut train_img_gz_file)?;
+            reqwest::blocking::get(TRAIN_LBL_URL)?.copy_to(&mut train_lbl_gz_file)?;
+            reqwest::blocking::get(TEST_IMG_URL)?.copy_to(&mut test_img_gz_file)?;
+            reqwest::blocking::get(TEST_LBL_URL)?.copy_to(&mut test_lbl_gz_file)?;
+            println!("Finished downloading...");
+        } else {
+            println!("Found dataste...");
+        }
+
+        if !(train_img_path.with_extension("").exists()
+            && train_lbl_path.with_extension("").exists()
+            && test_img_path.with_extension("").exists()
+            && test_lbl_path.with_extension("").exists())
+        {
+            println!("Decompressing dataset files...");
+            let mut train_img_gz = GzDecoder::new(fs::File::open(train_img_path)?);
+            let mut train_lbl_gz = GzDecoder::new(fs::File::open(train_lbl_path)?);
+            let mut test_img_gz = GzDecoder::new(fs::File::open(test_img_path)?);
+            let mut test_lbl_gz = GzDecoder::new(fs::File::open(test_lbl_path)?);
+
+            let mut train_img_file =
+                BufWriter::new(fs::File::create(train_img_path.with_extension(""))?);
+            let mut train_lbl_file =
+                BufWriter::new(fs::File::create(train_lbl_path.with_extension(""))?);
+            let mut test_img_file =
+                BufWriter::new(fs::File::create(test_img_path.with_extension(""))?);
+            let mut test_lbl_file =
+                BufWriter::new(fs::File::create(test_lbl_path.with_extension(""))?);
+
+            // the largest file is train img file, which is ~10MB
+            let mut buf: Vec<u8> = Vec::with_capacity(10 * (1024 * 1024));
+
+            train_img_gz.read_to_end(&mut buf)?;
+            train_img_file.write_all(&buf)?;
+            buf.clear();
+
+            train_lbl_gz.read_to_end(&mut buf)?;
+            train_lbl_file.write_all(&buf)?;
+            buf.clear();
+
+            test_img_gz.read_to_end(&mut buf)?;
+            test_img_file.write_all(&buf)?;
+            buf.clear();
+
+            test_lbl_gz.read_to_end(&mut buf)?;
+            test_lbl_file.write_all(&buf)?;
+            println!("Finished decompressing dataset files...");
+        } else {
+            println!("Found uncompressed file...");
+        }
+        println!("Loading up dataset...");
+        Ok(Self::from_file(
+            train_img_path.with_extension(""),
+            train_lbl_path.with_extension(""),
+            test_img_path.with_extension(""),
+            test_lbl_path.with_extension(""),
+        )?)
     }
 }
 
@@ -115,4 +200,9 @@ fn labels(path: impl AsRef<path::Path>) -> io::Result<(u32, u32, Vec<u8>)> {
     let magic_number = file.read_u32::<BigEndian>()?;
     let num_items = file.read_u32::<BigEndian>()?;
     Ok((magic_number, num_items, file.to_vec()))
+}
+
+#[test]
+fn test_download() {
+    Mnist::from_download().unwrap();
 }
