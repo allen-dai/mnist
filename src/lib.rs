@@ -97,11 +97,21 @@ impl Mnist {
         use flate2::read::GzDecoder;
         use std::io::prelude::*;
         use std::io::BufWriter;
-        fs::create_dir_all("./mnist_dataset")?;
-        let train_img_path = std::path::Path::new("./mnist_dataset/train-images-idx3-ubyte.gz");
-        let train_lbl_path = std::path::Path::new("./mnist_dataset/train-labels-idx1-ubyte.gz");
-        let test_img_path = std::path::Path::new("./mnist_dataset/t10k-images-idx3-ubyte.gz");
-        let test_lbl_path = std::path::Path::new("./mnist_dataset/t10k-labels-idx1-ubyte.gz");
+        let mut path = format!("{}/mnist_dataset", std::env::temp_dir().display());
+        if fs::create_dir_all(&path).is_err() {
+            path = "./mnist_dataset".into();
+            fs::create_dir_all(&path)?;
+        }
+        println!("Created dataset folder in {path}");
+
+        let train_img_path_ = format!("{path}/train-images-idx3-ubyte.gz");
+        let train_img_path = std::path::Path::new(&train_img_path_);
+        let train_lbl_path_ = format!("{path}/train-labels-idx1-ubyte.gz");
+        let train_lbl_path = std::path::Path::new(&train_lbl_path_);
+        let test_img_path_ = format!("{path}/t10k-images-idx3-ubyte.gz");
+        let test_img_path = std::path::Path::new(&test_img_path_);
+        let test_lbl_path_ = format!("{path}/t10k-labels-idx1-ubyte.gz");
+        let test_lbl_path = std::path::Path::new(&test_lbl_path_);
 
         if !(train_img_path.exists()
             && train_lbl_path.exists()
@@ -300,5 +310,5 @@ fn labels(path: impl AsRef<path::Path>) -> io::Result<(u32, u32, Vec<u8>)> {
 #[test]
 fn test_download() {
     let mut m = Mnist::from_download().unwrap();
-    m.random_xy_offsett();
+    m.random_xy_offset();
 }
