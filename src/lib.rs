@@ -101,8 +101,8 @@ impl Mnist {
         if fs::create_dir_all(&path).is_err() {
             path = "./mnist_dataset".into();
             fs::create_dir_all(&path)?;
+            println!("Created dataset folder in {path}");
         }
-        println!("Created dataset folder in {path}");
 
         let train_img_path_ = format!("{path}/train-images-idx3-ubyte.gz");
         let train_img_path = std::path::Path::new(&train_img_path_);
